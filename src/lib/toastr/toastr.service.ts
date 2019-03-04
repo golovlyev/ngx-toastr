@@ -261,15 +261,15 @@ export class ToastrService {
       this.overlayContainer
     );
     this.index = this.index + 1;
-    let sanitizedMessage: string | SafeHtml | undefined | null = message;
+    let trustedMessage: string | SafeHtml | undefined | null = message;
     if (message && config.enableHtml) {
-      sanitizedMessage = this.sanitizer.sanitize(SecurityContext.HTML, message);
+      trustedMessage = this.sanitizer.bypassSecurityTrustHtml(message);
     }
     const toastRef = new ToastRef(overlayRef);
     const toastPackage = new ToastPackage(
       this.index,
       config,
-      sanitizedMessage,
+      trustedMessage,
       title,
       toastType,
       toastRef
