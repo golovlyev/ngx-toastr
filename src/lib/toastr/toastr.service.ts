@@ -7,13 +7,14 @@ import {
   SecurityContext
 } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+
 import { Observable } from 'rxjs';
+
 import { Overlay } from '../overlay/overlay';
 import { ComponentPortal } from '../portal/portal';
 import { ToastInjector, ToastRef } from './toast-injector';
-import { ToastToken, TOAST_CONFIG } from './toast-token';
 import { ToastContainerDirective } from './toast.directive';
-import { GlobalConfig, IndividualConfig, ToastPackage } from './toastr-config';
+import { GlobalConfig, IndividualConfig, ToastPackage, ToastToken, TOAST_CONFIG } from './toastr-config';
 
 export interface ActiveToast<C> {
   /** Your Toast ID. Use this to close it individually */
@@ -34,7 +35,7 @@ export interface ActiveToast<C> {
   onAction: Observable<any>;
 }
 
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class ToastrService {
   toastrConfig: GlobalConfig;
   currentlyActive = 0;
@@ -50,12 +51,16 @@ export class ToastrService {
     private sanitizer: DomSanitizer,
     private ngZone: NgZone
   ) {
-    const defaultConfig = new token.defaults();
-    this.toastrConfig = { ...defaultConfig, ...token.config };
-    this.toastrConfig.iconClasses = {
-      ...defaultConfig.iconClasses,
-      ...token.config.iconClasses
+    this.toastrConfig = {
+      ...token.default,
+      ...token.config,
     };
+    if (token.config.iconClasses) {
+      this.toastrConfig.iconClasses = {
+        ...token.default.iconClasses,
+        ...token.config.iconClasses,
+      };
+    }
   }
   /** show toast */
   show(
@@ -173,19 +178,15 @@ export class ToastrService {
   /**
    * Determines if toast message is already shown
    */
-  isDuplicate(message: string, resetOnDuplicate: boolean) {
+  findDuplicate(message: string, resetOnDuplicate: boolean, countDuplicates: boolean) {
     for (let i = 0; i < this.toasts.length; i++) {
-      if (this.toasts[i].message === message) {
-        if (
-          resetOnDuplicate &&
-          this.toasts[i].toastRef.componentInstance.resetTimeout
-        ) {
-          this.toasts[i].toastRef.resetTimeout();
-        }
-        return true;
+      const toast = this.toasts[i];
+      if (toast.message === message) {
+        toast.toastRef.onDuplicate(resetOnDuplicate, countDuplicates);
+        return toast;
       }
     }
-    return false;
+    return null;
   }
 
   /** create a clone of global config and apply individual settings */
@@ -226,7 +227,7 @@ export class ToastrService {
 
   /**
    * Creates and attaches toast data to component
-   * returns null if toast is duplicate and preventDuplicates == True
+   * returns the active toast, or in case preventDuplicates is enabled the original/non-duplicate active toast.
    */
   private _buildNotification(
     toastType: string,
@@ -238,13 +239,17 @@ export class ToastrService {
       throw new Error('toastComponent required');
     }
     // max opened and auto dismiss = true
-    if (
-      message &&
-      this.toastrConfig.preventDuplicates &&
-      this.isDuplicate(message, this.toastrConfig.resetTimeoutOnDuplicate)
-    ) {
-      return null;
+    // if timeout = 0 resetting it would result in setting this.hideTime = Date.now(). Hence, we only want to reset timeout if there is
+    // a timeout at all
+    const duplicate = this.findDuplicate(
+      message,
+      this.toastrConfig.resetTimeoutOnDuplicate && config.timeOut > 0,
+      this.toastrConfig.countDuplicates
+    );
+    if (message && this.toastrConfig.preventDuplicates && duplicate !== null) {
+      return duplicate;
     }
+
     this.previousToastMessage = message;
     let keepInactive = false;
     if (
@@ -256,6 +261,7 @@ export class ToastrService {
         this.clear(this.toasts[0].toastId);
       }
     }
+
     const overlayRef = this.overlay.create(
       config.positionClass,
       this.overlayContainer
@@ -265,6 +271,7 @@ export class ToastrService {
     if (message && config.enableHtml) {
       trustedMessage = this.sanitizer.bypassSecurityTrustHtml(message);
     }
+
     const toastRef = new ToastRef(overlayRef);
     const toastPackage = new ToastPackage(
       this.index,

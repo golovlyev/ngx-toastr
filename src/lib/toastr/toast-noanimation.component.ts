@@ -1,15 +1,24 @@
 import { CommonModule } from '@angular/common';
+import { ModuleWithProviders } from '@angular/compiler/src/core';
 import {
   ApplicationRef,
   Component,
   HostBinding,
   HostListener,
   NgModule,
-  OnDestroy
+  OnDestroy,
 } from '@angular/core';
 import { SafeHtml } from '@angular/platform-browser';
+
 import { Subscription } from 'rxjs';
-import { IndividualConfig, ToastPackage } from './toastr-config';
+
+import {
+  DefaultNoComponentGlobalConfig,
+  GlobalConfig,
+  IndividualConfig,
+  ToastPackage,
+  TOAST_CONFIG,
+} from './toastr-config';
 import { ToastrService } from './toastr.service';
 
 @Component({
@@ -19,7 +28,7 @@ import { ToastrService } from './toastr.service';
     <span aria-hidden="true">&times;</span>
   </button>
   <div *ngIf="title" [class]="options.titleClass" [attr.aria-label]="title">
-    {{ title }}
+    {{ title }} <ng-container *ngIf="duplicatesCount">[{{ duplicatesCount + 1 }}]</ng-container>
   </div>
   <div *ngIf="message && options.enableHtml" role="alert" aria-live="polite"
     [class]="options.messageClass" [innerHTML]="message">
@@ -31,24 +40,25 @@ import { ToastrService } from './toastr.service';
   <div *ngIf="options.progressBar">
     <div class="toast-progress" [style.width]="width + '%'"></div>
   </div>
-  `
+  `,
 })
 export class ToastNoAnimation implements OnDestroy {
   message?: string | SafeHtml | null;
   title?: string;
   options: IndividualConfig;
+  duplicatesCount: number;
   originalTimeout: number;
   /** width of progress bar */
   width = -1;
   /** a combination of toast type and options.toastClass */
   @HostBinding('class') toastClasses = '';
 
+  /** hides component when waiting to be displayed */
   @HostBinding('style.display')
   get displayStyle() {
     if (this.state === 'inactive') {
       return 'none';
     }
-    return 'inherit';
   }
 
   /** controls animation */
@@ -59,11 +69,12 @@ export class ToastNoAnimation implements OnDestroy {
   private sub: Subscription;
   private sub1: Subscription;
   private sub2: Subscription;
+  private sub3: Subscription;
 
   constructor(
     protected toastrService: ToastrService,
     public toastPackage: ToastPackage,
-    protected appRef: ApplicationRef
+    protected appRef: ApplicationRef,
   ) {
     this.message = toastPackage.message;
     this.title = toastPackage.title;
@@ -81,11 +92,15 @@ export class ToastNoAnimation implements OnDestroy {
     this.sub2 = toastPackage.toastRef.timeoutReset().subscribe(() => {
       this.resetTimeout();
     });
+    this.sub3 = toastPackage.toastRef.countDuplicate().subscribe(count => {
+      this.duplicatesCount = count;
+    });
   }
   ngOnDestroy() {
     this.sub.unsubscribe();
     this.sub1.unsubscribe();
     this.sub2.unsubscribe();
+    this.sub3.unsubscribe();
     clearInterval(this.intervalId);
     clearTimeout(this.timeout);
   }
@@ -152,7 +167,7 @@ export class ToastNoAnimation implements OnDestroy {
     clearTimeout(this.timeout);
     this.state = 'removed';
     this.timeout = setTimeout(() =>
-      this.toastrService.remove(this.toastPackage.toastId)
+      this.toastrService.remove(this.toastPackage.toastId),
     );
   }
   @HostListener('click')
@@ -189,7 +204,7 @@ export class ToastNoAnimation implements OnDestroy {
     }
     this.timeout = setTimeout(
       () => this.remove(),
-      this.options.extendedTimeOut
+      this.options.extendedTimeOut,
     );
     this.options.timeOut = this.options.extendedTimeOut;
     this.hideTime = new Date().getTime() + (this.options.timeOut || 0);
@@ -200,10 +215,30 @@ export class ToastNoAnimation implements OnDestroy {
   }
 }
 
+export const DefaultNoAnimationsGlobalConfig: GlobalConfig = {
+  ...DefaultNoComponentGlobalConfig,
+  toastComponent: ToastNoAnimation,
+};
+
 @NgModule({
   imports: [CommonModule],
   declarations: [ToastNoAnimation],
   exports: [ToastNoAnimation],
-  entryComponents: [ToastNoAnimation]
+  entryComponents: [ToastNoAnimation],
 })
-export class ToastNoAnimationModule {}
+export class ToastNoAnimationModule {
+  static forRoot(config: Partial<GlobalConfig> = {}): ModuleWithProviders {
+    return {
+      ngModule: ToastNoAnimationModule,
+      providers: [
+        {
+          provide: TOAST_CONFIG,
+          useValue: {
+            default: DefaultNoAnimationsGlobalConfig,
+            config,
+          },
+        },
+      ],
+    };
+  }
+}

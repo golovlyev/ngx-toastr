@@ -24,7 +24,7 @@ import { ToastrService } from './toastr.service';
     <span aria-hidden="true">&times;</span>
   </button>
   <div *ngIf="title" [class]="options.titleClass" [attr.aria-label]="title">
-    {{ title }}
+    {{ title }} <ng-container *ngIf="duplicatesCount">[{{ duplicatesCount + 1 }}]</ng-container>
   </div>
   <div *ngIf="message && options.enableHtml" role="alertdialog" aria-live="polite"
     [class]="options.messageClass" [innerHTML]="message">
@@ -39,20 +39,17 @@ import { ToastrService } from './toastr.service';
   `,
   animations: [
     trigger('flyInOut', [
-      state(
-        'inactive',
-        style({
-          display: 'none',
-          opacity: 0
-        })
-      ),
-      state('active', style({})),
+      state('inactive', style({ opacity: 0 })),
+      state('active', style({ opacity: 1 })),
       state('removed', style({ opacity: 0 })),
       transition(
         'inactive => active',
         animate('{{ easeTime }}ms {{ easing }}')
       ),
-      transition('active => removed', animate('{{ easeTime }}ms {{ easing }}'))
+      transition(
+        'active => removed',
+        animate('{{ easeTime }}ms {{ easing }}')
+      )
     ])
   ],
   preserveWhitespaces: false
@@ -61,6 +58,7 @@ export class Toast implements OnDestroy {
   message?: string | SafeHtml | null;
   title?: string;
   options: IndividualConfig;
+  duplicatesCount: number;
   originalTimeout: number;
   /** width of progress bar */
   width = -1;
@@ -75,12 +73,22 @@ export class Toast implements OnDestroy {
       easing: 'ease-in'
     }
   };
+
+  /** hides component when waiting to be displayed */
+  @HostBinding('style.display')
+  get displayStyle() {
+    if (this.state.value === 'inactive') {
+      return 'none';
+    }
+  }
+
   private timeout: any;
   private intervalId: any;
   private hideTime: number;
   private sub: Subscription;
   private sub1: Subscription;
   private sub2: Subscription;
+  private sub3: Subscription;
 
   constructor(
     protected toastrService: ToastrService,
@@ -103,11 +111,15 @@ export class Toast implements OnDestroy {
     this.sub2 = toastPackage.toastRef.timeoutReset().subscribe(() => {
       this.resetTimeout();
     });
+    this.sub3 = toastPackage.toastRef.countDuplicate().subscribe(count => {
+      this.duplicatesCount = count;
+    });
   }
   ngOnDestroy() {
     this.sub.unsubscribe();
     this.sub1.unsubscribe();
     this.sub2.unsubscribe();
+    this.sub3.unsubscribe();
     clearInterval(this.intervalId);
     clearTimeout(this.timeout);
   }

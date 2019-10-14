@@ -1,7 +1,12 @@
+import { InjectionToken } from '@angular/core';
 import { SafeHtml } from '@angular/platform-browser';
+
 import { Observable, Subject } from 'rxjs';
+
 import { ComponentType } from '../portal/portal';
 import { ToastRef } from './toast-injector';
+
+export type ProgressAnimationType = 'increasing' | 'decreasing';
 
 /**
  * Configuration for an individual toast.
@@ -37,7 +42,8 @@ export interface IndividualConfig {
    * changes toast progress bar animation
    * default: decreasing
    */
-  progressAnimation?: 'increasing' | 'decreasing';
+  progressAnimation: ProgressAnimationType;
+
   /**
    * render html in toast message (possibly unsafe)
    * default: false
@@ -45,7 +51,7 @@ export interface IndividualConfig {
   enableHtml: boolean;
   /**
    * css class on toast component
-   * default: toast
+   * default: ngx-toastr
    */
   toastClass: string;
   /**
@@ -82,7 +88,7 @@ export interface IndividualConfig {
    * Angular toast component to be shown
    * default: Toast
    */
-  toastComponent: ComponentType<any>;
+  toastComponent?: ComponentType<any>;
   /**
    * Helps show toast from a websocket or from event outside Angular
    * default: false
@@ -124,7 +130,11 @@ export interface GlobalConfig extends IndividualConfig {
    * default: false
    */
   preventDuplicates: boolean;
-
+  /**
+   * display the number of duplicate messages
+   * default: false
+   */
+  countDuplicates: boolean;
   /**
    * Reset toast timeout when there's a duplicate (preventDuplicates needs to be set to true)
    * default: false
@@ -145,7 +155,7 @@ export class ToastPackage {
     public message: string | SafeHtml | null | undefined,
     public title: string | undefined,
     public toastType: string,
-    public toastRef: ToastRef<any>
+    public toastRef: ToastRef<any>,
   ) {
     this.toastRef.afterClosed().subscribe(() => {
       this._onAction.complete();
@@ -176,6 +186,48 @@ export class ToastPackage {
 }
 
 /* tslint:disable:no-empty-interface */
+/** @deprecated use GlobalConfig */
 export interface GlobalToastrConfig extends GlobalConfig {}
+/** @deprecated use IndividualConfig */
 export interface IndividualToastrConfig extends IndividualConfig {}
+/** @deprecated use IndividualConfig */
 export interface ToastrConfig extends IndividualConfig {}
+
+export const DefaultNoComponentGlobalConfig: GlobalConfig = {
+  maxOpened: 0,
+  autoDismiss: false,
+  newestOnTop: true,
+  preventDuplicates: false,
+  countDuplicates: false,
+  resetTimeoutOnDuplicate: false,
+  iconClasses: {
+    error: 'toast-error',
+    info: 'toast-info',
+    success: 'toast-success',
+    warning: 'toast-warning',
+  },
+
+  // Individual
+  closeButton: false,
+  disableTimeOut: false,
+  timeOut: 5000,
+  extendedTimeOut: 1000,
+  enableHtml: false,
+  progressBar: false,
+  toastClass: 'ngx-toastr',
+  positionClass: 'toast-top-right',
+  titleClass: 'toast-title',
+  messageClass: 'toast-message',
+  easing: 'ease-in',
+  easeTime: 300,
+  tapToDismiss: true,
+  onActivateTick: false,
+  progressAnimation: 'decreasing',
+};
+
+export interface ToastToken {
+  default: GlobalConfig;
+  config: Partial<GlobalConfig>;
+}
+
+export const TOAST_CONFIG = new InjectionToken<ToastToken>('ToastConfig');
