@@ -24,6 +24,9 @@
     "semantic-release": "cd dist && semantic-release"
   },
   "private": true,
+  "publishConfig": {
+    "registry": "http://repo.cg.ru/repository/npm-private/"
+  },
   "dependencies": {
     "@angular/animations": "6.1.2",
     "@angular/common": "6.1.2",
